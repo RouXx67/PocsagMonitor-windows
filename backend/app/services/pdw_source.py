@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Optional
 
 from app.config import settings
-from app.services.parser import POCSAGParser
 
 log = logging.getLogger("pocsag.pdw")
 
@@ -35,6 +34,32 @@ def _current_logfile() -> Path:
     return Path(settings.pdw_log_dir) / fname
 
 
+def _state_file() -> Path:
+    """Fichier d'état pour mémoriser la dernière position lue par fichier."""
+    return settings.data_dir / ".pdw_state.json"
+
+
+def _load_state() -> dict[str, int]:
+    import json
+    try:
+        p = _state_file()
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_state(state: dict[str, int]):
+    import json
+    try:
+        p = _state_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        log.error("[PDW] Sauvegarde état impossible: %s", e)
+
+
 def parse_pdw_line(line: str) -> Optional[dict]:
     """Transpose une ligne PDW vers {ric, func, message, raw_line}.
 
@@ -55,6 +80,8 @@ def parse_pdw_line(line: str) -> Optional[dict]:
     if not line or not line.strip():
         return None
 
+    # Retire un éventuel BOM UTF-8 et normalise les séparateurs
+    line = line.lstrip("\ufeff").strip()
     parts = line.split()
     # Minimum : RIC + au moins quelques colonnes
     if len(parts) < 6:
@@ -112,29 +139,33 @@ class PdwSource:
 
     def _run(self):
         log.info("[PDW] Démarrage de la lecture du log PDW (répertoire: %s)", settings.pdw_log_dir)
-        parser = POCSAGParser()
-        # offset de lecture du fichier courant, par nom de fichier
+        state = _load_state()
         last_file = None
         position = 0
-        first_pass = True
 
         while not self._stop.is_set():
             try:
                 path = _current_logfile()
 
-                # Bascule de fichier (nouveau jour) → on repart de zéro
+                # Bascule de fichier (nouveau jour) → on suit depuis 0 sans re-traiter
                 if last_file is not None and path.name != last_file:
                     log.info("[PDW] Nouveau fichier de log détecté : %s", path.name)
                     position = 0
+                    last_file = None
 
                 if path.exists():
-                    size = path.stat().st_size
-                    if first_pass or path.name != last_file:
-                        # Première ouverture OU nouveau fichier : on lit tout puis on suit
-                        position = 0
-                        first_pass = False
+                    current_size = path.stat().st_size
+                    # Repart de la position mémorisée pour ce fichier si déjà connu
+                    if last_file is None:
+                        position = state.get(path.name, 0)
+                        # Si le fichier a été tronqué (position > taille), on repart de 0
+                        if position > current_size:
+                            position = 0
+                        log.info("[PDW] Lecture de %s à partir de l'offset %d (taille %d)",
+                                 path.name, position, current_size)
 
-                    if size >= position:
+                    if current_size >= position:
+                        new_pos = position
                         with open(path, "r", encoding="utf-8", errors="replace") as f:
                             f.seek(position)
                             for line in f:
@@ -144,10 +175,13 @@ class PdwSource:
                                 if not line:
                                     continue
                                 _add_to_log_buffer(line)
-                                parsed = parser.feed(line)
+                                parsed = parse_pdw_line(line)
                                 if parsed:
                                     self._call_on_message(parsed)
-                        position = f.tell()
+                            new_pos = f.tell()
+                        state[path.name] = new_pos
+                        _save_state(state)
+                        position = new_pos
                         last_file = path.name
                 elif last_file is not None and not path.exists():
                     # Fichier du jour pas encore créé → on reste prêt
