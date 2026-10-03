@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>POCSAG Monitor v2 — Dashboard</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#09090b">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin/>
+<style>
+:root{--bg:#09090b;--card:#121216;--card-hover:#18181f;--border:#27272a;--primary:#0284c7;--primary-glow:rgba(2,132,199,0.15);--danger:#ef4444;--danger-glow:rgba(239,68,68,0.2);--success:#22c55e;--text:#f4f4f5;--sub:#a1a1aa}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px;min-height:100vh;background:radial-gradient(ellipse at 50% 0%,#0f172a 0%,#09090b 70%)}
+.container{max-width:1300px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);padding:15px 20px;margin-bottom:25px;background:rgba(18,18,22,0.8);backdrop-filter:blur(12px);border-radius:12px;box-shadow:0 4px 30px rgba(0,0,0,0.5)}
+h1{color:#38bdf8;font-size:1.3rem;margin:0;display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-0.02em}
+.live-dot{width:8px;height:8px;border-radius:50%;display:inline-block;animation:pulse 1.5s infinite}
+.live-dot.on{background:#22c55e;box-shadow:0 0 10px #22c55e}
+.live-dot.off{background:#6b7280}
+@keyframes pulse{0%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}
+.tabs{display:flex;gap:8px}
+.tab-btn{background:transparent;border:1px solid var(--border);color:var(--sub);padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:all 0.2s}
+.tab-btn:hover{border-color:var(--primary);color:var(--text)}
+.tab-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 0 15px var(--primary-glow)}
+.tab-content{display:none}
+.tab-content.active{display:block;animation:fadeIn 0.3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px}
+.stat-card{background:rgba(18,18,22,0.8);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:all 0.3s}
+.stat-card:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 8px 25px rgba(2,132,199,0.1)}
+.stat-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--primary)}
+.stat-card.urgent-stat::before{background:var(--danger)}
+.stat-title{color:var(--sub);font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+.stat-val{font-size:2rem;font-weight:800;color:#38bdf8;margin-top:8px;font-variant-numeric:tabular-nums}
+.stat-card.urgent-stat .stat-val{color:#f87171}
+.sparkline-card{background:rgba(18,18,22,0.8);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:25px;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+.sparkline-card .stat-title{margin-bottom:12px}
+.sparkline-card canvas{width:100%;height:80px;border-radius:6px}
+.map-card{background:rgba(18,18,22,0.8);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:15px;margin-bottom:25px;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+.map-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:0.95rem;font-weight:700;color:#38bdf8}
+#generalMap{width:100%;height:400px;border-radius:8px;border:1px solid var(--border);z-index:1;background:#121216}
+.toolbar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+input[type="text"],input[type="url"],input[type="password"]{flex:1;min-width:220px;background:#000;border:1px solid var(--border);color:#fff;padding:10px 14px;border-radius:8px;font-size:0.95rem}
+input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+.filter-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
+.pill{background:var(--card);border:1px solid var(--border);color:var(--sub);padding:6px 14px;border-radius:999px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+.pill:hover{border-color:var(--sub);color:var(--text)}
+.pill.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.pill.pill-urgent.active{background:var(--danger);border-color:var(--danger)}
+button{background:var(--primary);color:#fff;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:opacity 0.2s}
+button:hover{opacity:0.9}
+button.btn-danger{background:var(--danger)}
+button.btn-secondary{background:#27272a;color:#fff}
+.freq-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(2,132,199,0.15);border:1px solid rgba(2,132,199,0.3);padding:4px 12px;border-radius:999px;font-size:0.8rem;font-weight:600;color:#38bdf8}
+.table-container{background:rgba(18,18,22,0.8);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+table{width:100%;border-collapse:collapse;text-align:left}
+th,td{padding:14px 18px;border-bottom:1px solid var(--border);font-size:0.9rem}
+th{background:#181820;color:#38bdf8;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:700}
+tr:hover td{background:var(--card-hover)}
+.badge-ric{background:#0369a1;color:#e0f2fe;padding:4px 8px;border-radius:6px;font-weight:700;font-family:monospace;font-size:0.85rem}
+.badge-urgent{background:#991b1b;color:#fecaca;padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:800;letter-spacing:0.05em;box-shadow:0 0 10px var(--danger-glow);display:inline-block;animation:pulseUrgent 1.5s infinite}
+@keyframes pulseUrgent{0%{opacity:1}50%{opacity:0.6}100%{opacity:1}}
+.alias-tag{color:#4ade80;font-weight:600;margin-left:6px;font-size:0.85rem}
+.maps-link{color:#38bdf8;text-decoration:none;font-weight:600;font-size:0.85rem;background:rgba(56,189,248,0.1);padding:4px 10px;border-radius:6px;border:1px solid rgba(56,189,248,0.2);display:inline-block}
+.status-msg{margin-top:10px;font-size:0.85rem;font-weight:600}
+.status-msg.success{color:#4ade80}
+.status-msg.error{color:#f87171}
+.card{background:rgba(18,18,22,0.8);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+.service-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+select{background:#000;border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:0.95rem}
+.logs-console{background:#000;color:#4ade80;border:1px solid var(--border);border-radius:10px;padding:15px;max-height:450px;overflow-y:auto;font-size:0.8rem;white-space:pre-wrap;word-break:break-all;font-family:monospace}
+.menu-toggle{display:none;background:transparent;border:1px solid var(--border);color:var(--text);font-size:1.2rem;padding:6px 12px;border-radius:8px;cursor:pointer}
+.update-flag{background:#991b1b;color:#fecaca;padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px;box-shadow:0 0 10px var(--danger-glow);animation:pulseUrgent 1.5s infinite;cursor:pointer}
+@media(max-width:768px){
+header{flex-direction:column;align-items:flex-start;gap:12px;padding:15px}
+.header-top{width:100%;display:flex;justify-content:space-between;align-items:center}
+.menu-toggle{display:block}
+.tabs{display:none;width:100%;flex-direction:column;gap:6px;background:var(--card);padding:12px;border:1px solid var(--border);border-radius:10px}
+.tabs.open{display:flex}
+.tab-btn{width:100%;text-align:left}
+.service-grid{grid-template-columns:1fr}
+}
+#authScreen{text-align:center;padding:60px 20px;max-width:400px;margin:100px auto}
+#authScreen h2{color:#38bdf8}
+#authScreen input{width:100%;margin-bottom:12px}
+#loginError{color:#f87171;font-size:0.9rem;margin-top:8px}
+.version-badge{background:#27272a;color:var(--sub);padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:600}
+/* Animation pour les marqueurs */
+@keyframes markerPop {
+ 0% { transform: scale(0); opacity: 0; }
+ 70% { transform: scale(1.1); opacity: 0.8; }
+ 100% { transform: scale(1); opacity: 1; }
+}
+.marker-pop {
+ animation: markerPop 0.3s ease-out;
+}
+</style>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin></script>
+</head>
+<body>
+<div id="authScreen" style="display:none;">
+<h2>🔒 POCSAG Monitor v2</h2>
+<p style="color:var(--sub);">Authentification requise</p>
+<input type="password" id="loginPassword" placeholder="Mot de passe administrateur">
+<button onclick="login()" style="width:100%;">Se connecter</button>
+<div id="loginError"></div>
+</div>
+<div id="appContent">
+<div class="container">
+<header>
+<div class="header-top">
+<h1><span class="live-dot" id="liveDot"></span> 📡 POCSAG Monitor <span id="appVersion" class="version-badge">v2.7.0</span> <span id="updateFlag" style="display:none;" class="update-flag" onclick="runUpdate()">🚀 MAJ dispo</span></h1>
+<button class="menu-toggle" onclick="toggleMenu()">☰</button>
+</div>
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+<span class="freq-badge" id="freqBadge">📻 <span id="currentFreq">---</span> <span id="scanStatus" style="color:var(--success);font-size:0.7rem;">● scan</span></span>
+<div class="tabs" id="navTabs">
+<button class="tab-btn active" onclick="switchTab('monitoring',event)">📡 Direct</button>
+<button class="tab-btn" onclick="switchTab('settings',event)">⚙️ Settings</button>
+<button class="tab-btn" onclick="switchTab('history',event)">📜 Historique</button>
+</div>
+</div>
+</header>
+
+<div id="tab-monitoring" class="tab-content active">
+<div class="stats-grid">
+<div class="stat-card"><div class="stat-title">Trames du jour</div><div class="stat-val" id="statToday">0</div></div>
+<div class="stat-card urgent-stat"><div class="stat-title">Urgences</div><div class="stat-val" id="statUrgents">0</div></div>
+<div class="stat-card"><div class="stat-title">Dernière activité</div><div class="stat-val" id="statLastTime" style="font-size:1.3rem;margin-top:10px;">--:--</div></div>
+<div class="stat-card"><div class="stat-title">RIC Principal</div><div class="stat-val" id="statTopRic" style="font-size:1.3rem;margin-top:10px;">--</div></div>
+</div>
+<div class="sparkline-card">
+<div class="stat-title">📊 Activité 24h <span id="sparklineTotal" style="color:var(--sub);font-weight:400;font-size:0.75rem;"></span></div>
+<canvas id="sparklineChart"></canvas>
+</div>
+<div class="map-card">
+<div class="map-header"><span>📍 Carte des interventions</span><span style="font-size:0.75rem;color:var(--sub);font-weight:normal;" id="mapCount">0 géolocalisées</span></div>
+<div id="generalMap"></div>
+ <div id="mapLegend" style="margin-top:12px;font-size:0.75rem;color:var(--sub);display:flex;flex-wrap:wrap;gap:12px;align-items:center;"></div>
+ </div>
+<div class="filter-pills">
+<div class="pill active" onclick="setFilter('all',this)">📋 Tous</div>
+<div class="pill pill-urgent" onclick="setFilter('urgent',this)">🚨 Urgents</div>
+<div class="pill" onclick="setFilter('vsav',this)">🚒 VSAV</div>
+<div class="pill" onclick="setFilter('fpt',this)">🚒 FPT</div>
+</div>
+<div class="toolbar">
+<input type="text" id="searchInput" placeholder="🔍 Rechercher..." onkeyup="fetchMessages()">
+<button class="btn-secondary" onclick="clearLogs()">Vider</button>
+<button class="btn-secondary" onclick="requestNotifPermission()">🔔 Notifs</button>
+</div>
+<div class="table-container">
+<table>
+<thead><tr><th style="width:150px;">Heure</th><th style="width:220px;">RIC / Engin</th><th>Message</th><th style="width:160px;">Navigation</th></tr></thead>
+<tbody id="messagesTable"><tr><td colspan="4" style="color:var(--sub);text-align:center;padding:30px;">Chargement...</td></tr></tbody>
+</table>
+</div>
+</div>
+
+<div id="tab-settings" class="tab-content">
+<div class="card">
+<h2>📡 Décodage</h2>
+<div style="color:var(--sub);line-height:1.6;">
+<p><strong>Décodeur :</strong> PDW (via SDR# + Virtual Audio Cable)</p>
+<p style="font-size:0.9em;">La fréquence d'écoute et le gain sont réglés directement dans SDR#. Le fichier de log de PDW est lu automatiquement par cette application.</p>
+</div>
+</div>
+<div class="card">
+<h2>🔔 Notifications</h2>
+<div style="margin-bottom:12px;"><label style="font-weight:bold;display:block;margin-bottom:5px;">Discord Webhook :</label><input type="url" id="webhookUrl" placeholder="https://..."></div>
+<div style="display:flex;gap:10px;margin-bottom:12px;">
+<div style="flex:1;"><label style="font-weight:bold;display:block;margin-bottom:5px;">Telegram Token :</label><input type="text" id="tgToken" placeholder="123456:ABC"></div>
+<div style="flex:1;"><label style="font-weight:bold;display:block;margin-bottom:5px;">Chat ID :</label><input type="text" id="tgChatId" placeholder="-100..."></div>
+</div>
+<div style="margin-bottom:12px;"><label style="font-weight:bold;display:block;margin-bottom:5px;">Mots-clés :</label><input type="text" id="keywordsInput" placeholder="AVP, FEU"></div>
+<label><input type="checkbox" id="notifyEmpty"> Notifier trames sans texte</label>
+<div style="margin-top:12px;"><button onclick="saveNotifications()">Enregistrer</button><button class="btn-secondary" onclick="testDiscord()">Tester</button></div>
+<span id="notifStatus" class="status-msg"></span>
+</div>
+<div class="card">
+<h2>🏷️ Alias RIC</h2>
+<div class="toolbar"><input type="text" id="aliasRicInput" placeholder="RIC"><input type="text" id="aliasNameInput" placeholder="Nom"><button onclick="saveAlias()">Ajouter</button></div>
+<table><thead><tr><th>RIC</th><th>Alias</th><th>Action</th></tr></thead><tbody id="aliasListTable"></tbody></table>
+</div>
+<div class="card">
+<h2>🚫 Blacklist</h2>
+<div class="toolbar"><input type="text" id="blacklistRicInput" placeholder="RIC"><button class="btn-danger" onclick="addBlacklist()">Masquer</button></div>
+<table><thead><tr><th>RIC</th><th>Action</th></tr></thead><tbody id="blacklistTable"></tbody></table>
+</div>
+<div class="card">
+<h2>🔒 Sécurité</h2>
+<label style="font-weight:bold;display:block;margin-bottom:5px;">Nouveau mot de passe :</label>
+<input type="password" id="adminPwdInput" placeholder="Laisser vide">
+<button onclick="changePassword()">Changer</button>
+<span id="pwdStatus" class="status-msg"></span>
+</div>
+<div class="card">
+    <h2>📋 Logs</h2>
+    <div style="margin-bottom: 1rem;">
+      <h3 style="font-size: 1.1rem; color: var(--sub); margin-bottom: 0.5rem;">Journal système</h3>
+      <button class="btn-secondary" onclick="fetchLogs()">🔄 Rafraîchir</button>
+      <pre id="logsConsole" class="logs-console">Chargement...</pre>
+    </div>
+    <div>
+      <h3 style="font-size: 1.1rem; color: var(--sub); margin-bottom: 0.5rem;">Sortie multimon‑ng / rtl_fm</h3>
+      <button class="btn-secondary" onclick="fetchMultimonLogs()">🔄 Rafraîchir</button>
+      <button class="btn-secondary" id="toggleMultimonLive" onclick="toggleMultimonLive()">🔴 Live</button>
+      <button class="btn-secondary" onclick="clearMultimonLogs()">Vider</button>
+      <pre id="multimonConsole" class="logs-console" style="max-height: 300px;">Chargement...</pre>
+    </div>
+  </div>
+<div class="card" id="updateCard" style="display:none;border-color:var(--danger);">
+<h2 style="color:var(--danger);">🚀 Mise à jour disponible</h2>
+<p style="color:var(--sub);font-size:0.9rem;">Version <span id="remoteVersion"></span> disponible.</p>
+<button class="btn-danger" onclick="runUpdate()">Mettre à jour</button>
+<span id="updateStatus" class="status-msg"></span>
+    </div>
+  </div>
+</div>
+<div id="tab-history" class="tab-content">
+<div class="card">
+<h2>📜 Historique des paramètres</h2>
+<p style="color:var(--sub);font-size:0.9rem;margin-bottom:1rem;">
+Changements des paramètres (radio, notifications, mots-clés…). Seuls les changements réels sont enregistrés.
+</p>
+<div class="toolbar">
+<button onclick="loadHistory()">🔄 Rafraîchir</button>
+<select id="historyFilterKey" onchange="loadHistory()">
+<option value="">Tous les paramètres</option>
+<option value="keywords">Mots-clés</option>
+<option value="discord_webhook">Discord Webhook</option>
+<option value="telegram_bot_token">Telegram Token</option>
+<option value="telegram_chat_id">Telegram Chat ID</option>
+<option value="notify_empty">Notifier trames vides</option>
+</select>
+</div>
+<table class="table-container" style="margin-top:1rem;">
+<thead><tr><th style="width:150px;">Heure</th><th style="width:180px;">Paramètre</th><th style="width:200px;">Avant</th><th style="width:200px;">Après</th><th style="width:90px;">Action</th></tr></thead>
+<tbody id="historyTable"><tr><td colspan="5" style="color:var(--sub);text-align:center;padding:30px;">Aucun changement enregistré</td></tr></tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+let TOKEN = sessionStorage.getItem("pocsag_token")||"";
+let messages=[], hourlyData=[], leafletMap=null, markersLayer=null, currentFilter="all";
+let multimonLiveInterval = null;
+
+// ======== Utilitaires carte ========
+function natureColor(message) {
+    const msg = message.toUpperCase();
+    if (msg.includes("FEU")) return "#ef4444";        // 🔥 Feu
+    if (msg.includes("VSAV") || msg.includes("VSAB") || msg.includes("SAP")) return "#0ea5e9"; // 💧 VSAV/SAP
+    if (msg.includes("AVP") || msg.includes("VL CONTRE") || msg.includes("PL CONTRE") || msg.includes("COLLISION"))
+        return "#f59e0b";     // ⚠️  Accident
+    if (msg.includes("CARENCE") || msg.includes("MOYENS")) return "#a855f7"; // 💜 Carence
+    return "#6b7280";         // gris (autre)
+}
+
+function hexToRgb(hex) {
+    const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!m) return [128, 128, 128];
+    return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+function rgbToHex(r, g, b) {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+// Mélange deux couleurs selon ratio (0=col1, 1=col2)
+function blendColors(col1, col2, ratio) {
+    const [r1, g1, b1] = hexToRgb(col1);
+    const [r2, g2, b2] = hexToRgb(col2);
+    const r = Math.round(r1 + (r2 - r1) * ratio);
+    const g = Math.round(g1 + (g2 - g1) * ratio);
+    const b = Math.round(b1 + (b2 - b1) * ratio);
+    return rgbToHex(r, g, b);
+}
+
+// Calcul du fade selon l'âge (24h max) et urgence
+function computeFade(createdAt, isUrgent) {
+    const ageH = (Date.now() - new Date(createdAt)) / 3600000;
+    let fade = Math.max(0.15, 1 - ageH / 24);   // 1 → 0.15 après 24h+
+    if (isUrgent) fade = Math.max(0.4, fade);   // urgent reste plus visible
+    return fade;
+}
+
+// Gestion des coordonnées dupliquées : spider offset
+const coordCount = new Map();
+function getSpiderOffset(lat, lon, index) {
+    const key = lat.toFixed(6) + "|" + lon.toFixed(6);
+    const count = coordCount.get(key) || 0;
+    coordCount.set(key, count + 1);
+    if (count === 0) return [lat, lon];
+    // Position sur un cercle de rayon 0.0003° (~30 m)
+    const angle = (index % 8) * (Math.PI / 4);
+    const offset = 0.0003;
+    return [lat + offset * Math.sin(angle), lon + offset * Math.cos(angle)];
+}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escAttr(s){return String(s).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;')}
+async function api(path,opts={}){
+const headers={"Content-Type":"application/json",...opts.headers};
+if(TOKEN)headers["Authorization"]=`Bearer ${TOKEN}`;
+const res=await fetch(path,{...opts,headers});
+if(!res.ok && res.status===401){sessionStorage.removeItem("pocsag_token");TOKEN="";document.getElementById("appContent").style.display="none";document.getElementById("authScreen").style.display="block";throw new Error("Session expirée")}
+const text=await res.text();
+if(!text)return{};
+try{return JSON.parse(text)}catch{return text}
+}
+async function login(){
+const pwd=document.getElementById("loginPassword").value;
+const r=await api("/api/auth/login",{method:"POST",body:JSON.stringify({password:pwd})});
+if(r.access_token){TOKEN=r.access_token;sessionStorage.setItem("pocsag_token",TOKEN);document.getElementById("authScreen").style.display="none";document.getElementById("appContent").style.display="block";init()}
+else{document.getElementById("loginError").textContent="Mot de passe incorrect"}
+}
+async function init(){loadVersion();loadConfig();fetchMessages();fetchLogs();checkUpdate();updateStatusLoop();setTimeout(initMap,500);setInterval(fetchMessages,5000);setInterval(updateStatusLoop,10000)}
+if(TOKEN){document.getElementById("appContent").style.display="block";init()}
+else{document.getElementById("authScreen").style.display="block"}
+async function updateStatusLoop(){
+const r=await api("/api/radio/dongle");
+const dot=document.getElementById("liveDot");
+if(r.detected){dot.className="live-dot on"}else{dot.className="live-dot off"}
+const s=await api("/api/service/status");
+if(s.current_freq){document.getElementById("currentFreq").textContent=s.current_freq;document.getElementById("scanStatus").textContent="● écoute"}
+}
+async function loadVersion(){const v=await api("/api/version");document.getElementById("appVersion").textContent="v"+(v.version||"?")}
+async function loadConfig(){
+const cfg=await api("/api/config");
+if(cfg.discord_webhook)document.getElementById("webhookUrl").value=cfg.discord_webhook;
+if(cfg.telegram_bot_token)document.getElementById("tgToken").value=cfg.telegram_bot_token;
+if(cfg.telegram_chat_id)document.getElementById("tgChatId").value=cfg.telegram_chat_id;
+if(cfg.keywords)document.getElementById("keywordsInput").value=cfg.keywords.join(", ");
+document.getElementById("notifyEmpty").checked=cfg.notify_empty!==false;
+renderAliases(cfg.aliases||{});renderBlacklist(cfg.blacklist||[])
+}
+async function loadHistory() {
+const filter = document.getElementById("historyFilterKey").value;
+let url = "/api/config/history?limit=100";
+if (filter) url += "&key=" + encodeURIComponent(filter);
+const data = await api(url);
+if (!Array.isArray(data)) { return; }
+
+// Mapping des clés vers libellés lisible
+const keyLabels = {
+    keywords: "Mots‑clés",
+    discord_webhook: "Discord Webhook",
+    telegram_bot_token: "Telegram Token",
+    telegram_chat_id: "Telegram Chat ID",
+    notify_empty: "Notifier trames vides"
+};
+
+const tbody = document.getElementById("historyTable");
+if (data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:30px;">Aucun changement enregistré</td></tr>`;
+    return;
+}
+
+const rows = data.map(h => {
+    const keyLabel = keyLabels[h.key] || h.key;
+    const oldVal = h.old_value === null ? '<i>(création)</i>' : escHtml(h.old_value);
+    const newVal = h.new_value === null ? '<i>(suppression)</i>' : escHtml(h.new_value);
+    const date = new Date(h.created_at).toLocaleString("fr-FR");
+    return `<tr>
+        <td><small>${escHtml(date)}</small></td>
+        <td><span class="badge-ric" style="background:#6b7280;">${escHtml(keyLabel)}</span></td>
+        <td style="word-break:break-all;max-width:200px;font-family:monospace;font-size:0.9rem;">${oldVal}</td>
+        <td style="word-break:break-all;max-width:200px;font-family:monospace;font-size:0.9rem;">${newVal}</td>
+        <td><button class="btn-secondary" onclick="restoreHistory(${h.id})" ${h.old_value===null?'disabled':''}>Restaurer</button></td>
+    </tr>`;
+}).join("");
+tbody.innerHTML = rows;
+}
+
+async function restoreHistory(id) {
+if (!confirm("Revenir à la valeur précédente ? Le paramètre sera mis à jour et un nouvel événement sera ajouté à l'historique.")) return;
+const r = await api(`/api/config/history/${id}/restore`, { method: "POST" });
+if (r.status === "ok") {
+    loadHistory();
+    // Rafraîchir aussi la config affichée (sauf pour les onglets non visibles)
+    loadConfig();
+}
+}
+
+async function fetchMessages(){
+const s=document.getElementById("searchInput").value;
+const url="/api/messages?limit=200"+(s?"&search="+encodeURIComponent(s):"");
+const data=await api(url);
+if(Array.isArray(data)){messages=data;updateStats();renderMessages();updateMapMarkers()}
+}
+async function updateStats(){
+const s=await api("/api/stats");
+document.getElementById("statToday").textContent=s.total_today??0;
+document.getElementById("statUrgents").textContent=s.urgent_today??0;
+if(s.last_activity){const d=new Date(s.last_activity);document.getElementById("statLastTime").textContent=d.toLocaleTimeString("fr-FR")}
+document.getElementById("statTopRic").textContent=s.top_ric_alias||s.top_ric||"--";
+if(s.hourly&&s.hourly.length){hourlyData=s.hourly;drawSparkline(s.hourly,s.total_today)}
+}
+function drawSparkline(data,total){
+const c=document.getElementById("sparklineChart");
+const ctx=c.getContext("2d");
+const dpr=window.devicePixelRatio||1;
+const rect=c.parentElement.getBoundingClientRect();
+c.width=rect.width*dpr;c.height=80*dpr;
+c.style.width=rect.width+"px";c.style.height="80px";
+ctx.scale(dpr,dpr);
+const w=rect.width,h=80,pad=4;
+const max=Math.max(...data,1);
+const barW=(w-pad*2)/data.length;
+ctx.clearRect(0,0,w,h);
+data.forEach((v,i)=>{
+const barH=(v/max)*(h-pad*2);
+const x=pad+i*barW,y=h-pad-barH;
+const grad=ctx.createLinearGradient(x,y,x,h-pad);
+grad.addColorStop(0,"#0284c7");grad.addColorStop(1,"#0369a1");
+ctx.fillStyle=grad;
+ctx.beginPath();ctx.roundRect(x,y,barW-1,barH,2);ctx.fill()
+})
+document.getElementById("sparklineTotal").textContent=`${total} msgs | pic ${max}`;
+}
+function renderMessages(){
+const tbody=document.getElementById("messagesTable");
+const kw=(document.getElementById("keywordsInput").value||"").split(",").map(k=>k.trim().toLowerCase()).filter(k=>k);
+const filtered=messages.filter(m=>{
+if(currentFilter==="urgent")return m.is_urgent;
+if(currentFilter==="vsav")return m.message.toUpperCase().includes("VSAV");
+if(currentFilter==="fpt")return m.message.toUpperCase().includes("FPT");
+return true
+});
+if(!filtered.length){tbody.innerHTML="<tr><td colspan='4' style='color:var(--sub);text-align:center;padding:30px;'>Aucun message.</td></tr>";return}
+tbody.innerHTML=filtered.map(m=>{
+const gmaps=m.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.address)}`:"";
+return`<tr><td style="color:var(--sub);">${new Date(m.created_at).toLocaleString("fr-FR")}</td><td><span class="badge-ric">${escHtml(m.ric)}</span>${m.alias?` <span class="alias-tag">(${escHtml(m.alias)})</span>`:""}${m.is_urgent?` <span class="badge-urgent">URGENT</span>`:""}</td><td>${escHtml(m.message)}</td><td>${m.address?`<div style="font-size:0.85rem;margin-bottom:4px;">${escHtml(m.address)}</div><a class="maps-link" href="${gmaps}" target="_blank">🗺️ Maps</a>`:"-"}</td></tr>`
+}).join("")
+}
+function initMap(){
+ if(leafletMap)return;
+ try{
+ leafletMap=L.map("generalMap",{zoomControl:true}).setView([48.4,7.5],9);
+ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap",maxZoom:19}).addTo(leafletMap);
+ // Groupe simple (pas de clustering) pour points individuels
+ markersLayer = L.layerGroup();
+ leafletMap.addLayer(markersLayer);
+ }catch(e){console.warn("Map:",e)}
+}
+function updateMapMarkers(){
+ if(!leafletMap||!markersLayer)return;
+ markersLayer.clearLayers();
+ coordCount.clear(); // réinitialise l'offset spider
+ let count=0;
+
+ messages.forEach(m=>{
+ if(m.lat!=null&&m.lon!=null){
+ const baseColor = natureColor(m.message);
+ const fade = computeFade(m.created_at, m.is_urgent);
+ const color = m.is_urgent ? "#dc2626" : blendColors(baseColor, "#9ca3af", 1 - fade);
+ const opacity = fade;
+ const radius = 6 + fade * 4; // rayon 10 → 7 en 24h
+ const [lat, lon] = getSpiderOffset(m.lat, m.lon, count);
+
+ const mk = L.circleMarker([lat, lon], {
+ radius,
+ fillColor: color,
+ color: "#fff",
+ weight: 2,
+ fillOpacity: opacity,
+ className: "marker-pop" // animation CSS
+ });
+
+ let natureText = "";
+ if (baseColor === "#ef4444") natureText = "🔥 Feu";
+ else if (baseColor === "#0ea5e9") natureText = "💧 VSAV/SAP";
+ else if (baseColor === "#f59e0b") natureText = "⚠️ AVP/Accident";
+ else if (baseColor === "#a855f7") natureText = "💜 " + (m.message.includes("CARENCE") ? "Carence" : "Moyens");
+ else natureText = "📌 Autre";
+ 
+ const popupContent = `<div style="max-width:300px;">
+ <b style="color:${color}">${natureText} ${m.is_urgent?"🚨 URGENT":""}</b><br>
+ <b>RIC:</b> ${m.ric} ${m.alias?"("+m.alias+")":""}<br>
+ <b>Msg:</b> ${escHtml(m.message)}<br>
+ <b>Adresse:</b> ${m.address||"N/A"}<br>
+ <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.address||"")}" target="_blank">🗺️ Maps</a><br>
+ <small style="color:#6b7280;">${new Date(m.created_at).toLocaleString("fr-FR")} – ${Math.round((Date.now() - new Date(m.created_at)) / 60000)} min</small>
+ </div>`;
+ mk.bindPopup(popupContent);
+ markersLayer.addLayer(mk);
+ count++;
+ }
+ });
+
+ document.getElementById("mapCount").textContent = count + " géolocalisées";
+
+// Mise à jour de la légende (créée une seule fois)
+ updateMapLegend();
+}
+function updateMapLegend() {
+ const legend = document.getElementById("mapLegend");
+ if (!legend) return;
+ const items = [
+ {color:"#ef4444", label:"🔥 Feu"},
+ {color:"#0ea5e9", label:"💧 VSAV/SAP"},
+ {color:"#f59e0b", label:"⚠️ AVP/Accident"},
+ {color:"#a855f7", label:"💜 Carence/Moyens"},
+ {color:"#6b7280", label:"📌 Autre"},
+ {color:"#dc2626", label:"🚨 Urgent (mot‑clé)"}
+ ];
+ const html = items.map(item => `
+ <div style="display:flex;align-items:center;gap:4px;">
+ <div style="width:12px;height:12px;border-radius:50%;background:${item.color};border:1px solid #fff;"></div>
+ <span>${item.label}</span>
+ </div>
+ `).join("");
+ legend.innerHTML = html + `<div style="color:#9ca3af;margin-left:10px;">← Neuf → <span style="opacity:0.6">fondu après 24 h</span></div>`;
+}
+function setFilter(type,btn){
+document.querySelectorAll(".pill").forEach(p=>p.classList.remove("active"));
+btn.classList.add("active");currentFilter=type;renderMessages()
+}
+async function clearLogs(){if(confirm("Vider l'historique ?")){await api("/api/clear-logs",{method:"POST"});fetchMessages()}}
+async function checkUpdate(){
+const r=await api("/api/update/check");
+if(r.update_available){document.getElementById("updateFlag").style.display="inline-flex";document.getElementById("updateCard").style.display="block";document.getElementById("remoteVersion").textContent="v"+r.remote}
+}
+async function runUpdate(){
+if(!confirm("Lancer la mise à jour ? Le service va redémarrer."))return;
+showStatus("updateStatus","Mise à jour en cours...","");document.getElementById("updateFlag").style.display="none";document.getElementById("updateCard").style.display="none";
+const r=await api("/api/update/run",{method:"POST"});
+if(r.status==="updating"){showStatus("updateStatus","✅ Lancée ! Rechargement dans 15s...","success");setTimeout(()=>location.reload(),15000)}
+else{showStatus("updateStatus","❌ "+r.message||"Échec","error")}
+}
+async function saveNotifications(){
+try{
+const body={
+discord_webhook:document.getElementById("webhookUrl").value.trim(),
+telegram_bot_token:document.getElementById("tgToken").value.trim(),
+telegram_chat_id:document.getElementById("tgChatId").value.trim(),
+notify_empty:document.getElementById("notifyEmpty").checked,
+keywords:document.getElementById("keywordsInput").value.split(",").map(s=>s.trim()).filter(s=>s),
+};
+await api("/api/config",{method:"POST",body:JSON.stringify(body)});
+showStatus("notifStatus","✅ Enregistré","success")
+}catch(e){showStatus("notifStatus","❌ "+e.message,"error")}
+}
+async function testDiscord(){const r=await api("/api/test-discord",{method:"POST"});showStatus("notifStatus",r.success?"✅ Test envoyé":"❌ "+r.message,r.success?"success":"error")}
+async function saveAlias(){
+const ric=document.getElementById("aliasRicInput").value.trim(),name=document.getElementById("aliasNameInput").value.trim();
+if(!ric||!name)return;
+await api("/api/aliases",{method:"POST",body:JSON.stringify({ric,name})});
+document.getElementById("aliasRicInput").value="";document.getElementById("aliasNameInput").value="";loadConfig()
+}
+async function deleteAlias(ric){await api("/api/aliases/"+encodeURIComponent(ric),{method:"DELETE"});loadConfig()}
+async function addBlacklist(){
+const ric=document.getElementById("blacklistRicInput").value.trim();
+if(!ric)return;
+await api("/api/blacklist",{method:"POST",body:JSON.stringify({ric})});
+document.getElementById("blacklistRicInput").value="";loadConfig()
+}
+async function removeBlacklist(ric){await api("/api/blacklist/"+encodeURIComponent(ric),{method:"DELETE"});loadConfig()}
+async function changePassword(){
+const pwd=document.getElementById("adminPwdInput").value.trim();
+if(!pwd){showStatus("pwdStatus","Mot de passe vide","error");return}
+const r=await api("/api/auth/change-password?token="+TOKEN,{method:"POST",body:JSON.stringify({password:pwd})});
+showStatus("pwdStatus",r.status==="ok"?"✅ Modifié":"❌ Erreur",r.status==="ok"?"success":"error");
+if(r.status==="ok")document.getElementById("adminPwdInput").value=""
+}
+async function fetchLogs(){
+  const text=await api("/api/logs");
+  document.getElementById("logsConsole").textContent=typeof text=="string"?(text||"(vide)"):JSON.stringify(text)
+}
+
+async function fetchMultimonLogs(){
+  try {
+    const resp = await api("/api/multimon-logs?lines=200");
+    const lines = resp.lines || [];
+    const formatted = lines.map(entry => 
+      `[${entry.ts}] ${entry.source}: ${entry.line}`).join("\n");
+    const consoleEl = document.getElementById("multimonConsole");
+    consoleEl.textContent = formatted || "(vide)";
+    // Auto-scroll vers le bas si live actif
+    if (multimonLiveInterval) {
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+  } catch (error) {
+    console.error("fetchMultimonLogs", error);
+    document.getElementById("multimonConsole").textContent = "Erreur de chargement";
+  }
+}
+
+function toggleMultimonLive() {
+  const btn = document.getElementById("toggleMultimonLive");
+  if (multimonLiveInterval) {
+    clearInterval(multimonLiveInterval);
+    multimonLiveInterval = null;
+    btn.textContent = "🔴 Live";
+    btn.classList.remove("btn-danger");
+    btn.classList.add("btn-secondary");
+  } else {
+    fetchMultimonLogs();
+    multimonLiveInterval = setInterval(fetchMultimonLogs, 2000);
+    btn.textContent = "✅ Live";
+    btn.classList.remove("btn-secondary");
+    btn.classList.add("btn-danger");
+  }
+}
+
+function clearMultimonLogs() {
+  // Vider localement le buffer (côté serveur) n'est pas disponible.
+  // On vide juste l'affichage
+  document.getElementById("multimonConsole").textContent = "(vide)";
+}
+
+// Charger une première fois au démarrage
+if (TOKEN) {
+  setTimeout(fetchMultimonLogs, 2000);
+}
+function renderAliases(aliases){
+const tbody=document.getElementById("aliasListTable"),keys=Object.keys(aliases);
+if(!keys.length){tbody.innerHTML="<tr><td colspan='3'>Aucun alias.</td></tr>";return}
+tbody.innerHTML=keys.map(k=>`<tr><td><span class="badge-ric">${escHtml(k)}</span></td><td><b>${escHtml(aliases[k])}</b></td><td><button class="btn-danger" onclick="deleteAlias('${escAttr(k)}')">Supprimer</button></td></tr>`).join("")
+}
+function renderBlacklist(list){
+const tbody=document.getElementById("blacklistTable");
+if(!list.length){tbody.innerHTML="<tr><td colspan='2'>Aucun RIC masqué.</td></tr>";return}
+tbody.innerHTML=list.map(k=>`<tr><td><span class="badge-ric" style="background:#4b5563;">${escHtml(k)}</span></td><td><button class="btn-danger" onclick="removeBlacklist('${escAttr(k)}')">Retirer</button></td></tr>`).join("")
+}
+function showStatus(id,msg,type){const el=document.getElementById(id);if(el){el.textContent=msg;el.className="status-msg "+type}}
+function toggleMenu(){document.getElementById("navTabs").classList.toggle("open")}
+function switchTab(id,evt){
+document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
+if(evt&&evt.target)evt.target.classList.add("active");
+document.getElementById("tab-"+id).classList.add("active");
+document.getElementById("navTabs").classList.remove("open")
+}
+async function requestNotifPermission(){
+if(!("Notification"in window)){alert("Notifications non supportées");return}
+const p=await Notification.requestPermission();
+if(p==="granted")new Notification("POCSAG Monitor",{body:"Notifications activées"})
+}
+if("serviceWorker"in navigator){navigator.serviceWorker.register("/sw.js").catch(()=>{})}
+</script>
+</body>
+</html>
