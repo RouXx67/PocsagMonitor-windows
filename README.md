@@ -38,6 +38,29 @@ Page web (http://<IP-VM>:8080)
 
 ## Installation
 
+### Automatique (recommandé)
+
+Lancez en **mode Administrateur** l'un de ces scripts :
+
+```bat
+scripts\install_windows.bat
+```
+
+ou (PowerShell, plus robuste) :
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process
+.\scripts\install_windows.ps1
+```
+
+Le script :
+1. (ré)agit une copie du code depuis GitHub
+2. installe **Python 3.11+** en portable si nécessaire
+3. crée `.venv` et installe les dépendances
+4. (optionnel) installe le service Windows via **NSSM**
+
+### Manuel
+
 ```bat
 cd backend
 python -m venv .venv
