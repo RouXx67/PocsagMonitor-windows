@@ -42,9 +42,5 @@ class Settings(BaseSettings):
 
     model_config = {"env_prefix": "POCSAG_"}
 
-    @property
-    def db_url(self) -> str:
-        return f"sqlite+aiosqlite:///{self.data_dir / self.db_name}"
-
 
 settings = Settings()
